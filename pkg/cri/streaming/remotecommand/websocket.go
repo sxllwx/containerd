@@ -1,20 +1,4 @@
 /*
-   Copyright The containerd Authors.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-/*
 Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +22,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apiserver/pkg/server/httplog"
+	"k8s.io/apiserver/pkg/endpoints/responsewriter"
 	"k8s.io/apiserver/pkg/util/wsstream"
 )
 
@@ -84,9 +68,9 @@ func writeChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// createWebSocketStreams returns a context containing the websocket connection and
+// createWebSocketStreams returns a connectionContext containing the websocket connection and
 // streams needed to perform an exec or an attach.
-func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Options, idleTimeout time.Duration) (*context, bool) {
+func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Options, idleTimeout time.Duration) (*connectionContext, bool) {
 	channels := createChannels(opts)
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{
 		"": {
@@ -111,7 +95,7 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Opti
 		},
 	})
 	conn.SetIdleTimeout(idleTimeout)
-	negotiatedProtocol, streams, err := conn.Open(httplog.Unlogged(req, w), req)
+	negotiatedProtocol, streams, err := conn.Open(responsewriter.GetOriginal(w), req)
 	if err != nil {
 		runtime.HandleError(fmt.Errorf("unable to upgrade websocket connection: %v", err))
 		return nil, false
@@ -128,7 +112,7 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Opti
 		streams[errorChannel].Write([]byte{})
 	}
 
-	ctx := &context{
+	ctx := &connectionContext{
 		conn:         conn,
 		stdinStream:  streams[stdinChannel],
 		stdoutStream: streams[stdoutChannel],

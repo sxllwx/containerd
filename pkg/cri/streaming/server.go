@@ -1,20 +1,4 @@
 /*
-   Copyright The containerd Authors.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-/*
 Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +17,7 @@ limitations under the License.
 package streaming
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -45,15 +30,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/emicklei/go-restful/v3"
+	restful "github.com/emicklei/go-restful/v3"
 
+	"github.com/containerd/containerd/pkg/cri/streaming/portforward"
+	remotecommandserver "github.com/containerd/containerd/pkg/cri/streaming/remotecommand"
 	"k8s.io/apimachinery/pkg/types"
 	remotecommandconsts "k8s.io/apimachinery/pkg/util/remotecommand"
 	"k8s.io/client-go/tools/remotecommand"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
-
-	"github.com/containerd/containerd/pkg/cri/streaming/portforward"
-	remotecommandserver "github.com/containerd/containerd/pkg/cri/streaming/remotecommand"
 )
 
 // Server is the library interface to serve the stream requests.
@@ -78,9 +62,9 @@ type Server interface {
 
 // Runtime is the interface to execute the commands and provide the streams.
 type Runtime interface {
-	Exec(containerID string, cmd []string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error
-	Attach(containerID string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error
-	PortForward(podSandboxID string, port int32, stream io.ReadWriteCloser) error
+	Exec(ctx context.Context, containerID string, cmd []string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error
+	Attach(ctx context.Context, containerID string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error
+	PortForward(ctx context.Context, podSandboxID string, port int32, stream io.ReadWriteCloser) error
 }
 
 // Config defines the options used for running the stream server.
@@ -162,11 +146,10 @@ func NewServer(config Config, runtime Runtime) (Server, error) {
 	handler.Add(ws)
 	s.handler = handler
 	s.server = &http.Server{
-		Addr:      s.config.Addr,
-		Handler:   s.handler,
-		TLSConfig: s.config.TLSConfig,
-		// TODO(fuweid): allow user to configure streaming server
-		ReadHeaderTimeout: 30 * time.Minute, // Fix linter G112: Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server
+		Addr:              s.config.Addr,
+		Handler:           s.handler,
+		TLSConfig:         s.config.TLSConfig,
+		ReadHeaderTimeout: 30 * time.Minute,
 	}
 
 	return s, nil
@@ -388,14 +371,14 @@ var _ remotecommandserver.Executor = &criAdapter{}
 var _ remotecommandserver.Attacher = &criAdapter{}
 var _ portforward.PortForwarder = &criAdapter{}
 
-func (a *criAdapter) ExecInContainer(podName string, podUID types.UID, container string, cmd []string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize, timeout time.Duration) error {
-	return a.Runtime.Exec(container, cmd, in, out, err, tty, resize)
+func (a *criAdapter) ExecInContainer(ctx context.Context, podName string, podUID types.UID, container string, cmd []string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize, timeout time.Duration) error {
+	return a.Runtime.Exec(ctx, container, cmd, in, out, err, tty, resize)
 }
 
-func (a *criAdapter) AttachContainer(podName string, podUID types.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
-	return a.Runtime.Attach(container, in, out, err, tty, resize)
+func (a *criAdapter) AttachContainer(ctx context.Context, podName string, podUID types.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+	return a.Runtime.Attach(ctx, container, in, out, err, tty, resize)
 }
 
-func (a *criAdapter) PortForward(podName string, podUID types.UID, port int32, stream io.ReadWriteCloser) error {
-	return a.Runtime.PortForward(podName, port, stream)
+func (a *criAdapter) PortForward(ctx context.Context, podName string, podUID types.UID, port int32, stream io.ReadWriteCloser) error {
+	return a.Runtime.PortForward(ctx, podName, port, stream)
 }

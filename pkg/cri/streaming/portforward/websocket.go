@@ -1,20 +1,4 @@
 /*
-   Copyright The containerd Authors.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-/*
 Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +17,7 @@ limitations under the License.
 package portforward
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -47,7 +32,7 @@ import (
 	api "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apiserver/pkg/server/httplog"
+	"k8s.io/apiserver/pkg/endpoints/responsewriter"
 	"k8s.io/apiserver/pkg/util/wsstream"
 )
 
@@ -129,7 +114,7 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 		},
 	})
 	conn.SetIdleTimeout(idleTimeout)
-	_, streams, err := conn.Open(httplog.Unlogged(req, w), req)
+	_, streams, err := conn.Open(responsewriter.GetOriginal(w), req)
 	if err != nil {
 		err = fmt.Errorf("unable to upgrade websocket connection: %v", err)
 		return err
@@ -157,7 +142,7 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 		uid:         uid,
 		forwarder:   portForwarder,
 	}
-	h.run()
+	h.run(req.Context())
 
 	return nil
 }
@@ -182,7 +167,7 @@ type websocketStreamHandler struct {
 
 // run invokes the websocketStreamHandler's forwarder.PortForward
 // function for the given stream pair.
-func (h *websocketStreamHandler) run() {
+func (h *websocketStreamHandler) run(ctx context.Context) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(h.streamPairs))
 
@@ -190,20 +175,20 @@ func (h *websocketStreamHandler) run() {
 		p := pair
 		go func() {
 			defer wg.Done()
-			h.portForward(p)
+			h.portForward(ctx, p)
 		}()
 	}
 
 	wg.Wait()
 }
 
-func (h *websocketStreamHandler) portForward(p *websocketStreamPair) {
+func (h *websocketStreamHandler) portForward(ctx context.Context, p *websocketStreamPair) {
 	defer p.dataStream.Close()
 	defer p.errorStream.Close()
 
-	klog.V(5).Infof("(conn=%p) invoking forwarder.PortForward for port %d", h.conn, p.port)
-	err := h.forwarder.PortForward(h.pod, h.uid, p.port, p.dataStream)
-	klog.V(5).Infof("(conn=%p) done invoking forwarder.PortForward for port %d", h.conn, p.port)
+	klog.V(5).InfoS("Connection invoking forwarder.PortForward for port", "port", p.port)
+	err := h.forwarder.PortForward(ctx, h.pod, h.uid, p.port, p.dataStream)
+	klog.V(5).InfoS("Connection done invoking forwarder.PortForward for port", "port", p.port)
 
 	if err != nil {
 		msg := fmt.Errorf("error forwarding port %d to pod %s, uid %v: %v", p.port, h.pod, h.uid, err)

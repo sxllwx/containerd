@@ -126,7 +126,7 @@ func newStreamRuntime(c *criService) streaming.Runtime {
 
 // Exec executes a command inside the container. exec.ExitError is returned if the command
 // returns non-zero exit code.
-func (s *streamRuntime) Exec(containerID string, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser,
+func (s *streamRuntime) Exec(_ context.Context, containerID string, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser,
 	tty bool, resize <-chan remotecommand.TerminalSize) error {
 	exitCode, err := s.c.execInContainer(ctrdutil.NamespacedContext(), containerID, execOptions{
 		cmd:    cmd,
@@ -148,16 +148,15 @@ func (s *streamRuntime) Exec(containerID string, cmd []string, stdin io.Reader, 
 	}
 }
 
-func (s *streamRuntime) Attach(containerID string, in io.Reader, out, err io.WriteCloser, tty bool,
+func (s *streamRuntime) Attach(ctx context.Context, containerID string, in io.Reader, out, err io.WriteCloser, tty bool,
 	resize <-chan remotecommand.TerminalSize) error {
 	return s.c.attachContainer(ctrdutil.NamespacedContext(), containerID, in, out, err, tty, resize)
 }
 
-func (s *streamRuntime) PortForward(podSandboxID string, port int32, stream io.ReadWriteCloser) error {
+func (s *streamRuntime) PortForward(ctx context.Context, podSandboxID string, port int32, stream io.ReadWriteCloser) error {
 	if port <= 0 || port > math.MaxUint16 {
 		return fmt.Errorf("invalid port %d", port)
 	}
-	ctx := ctrdutil.NamespacedContext()
 	return s.c.portForward(ctx, podSandboxID, port, stream)
 }
 
