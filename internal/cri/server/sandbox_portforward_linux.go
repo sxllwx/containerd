@@ -83,15 +83,15 @@ func (c *criService) portForward(ctx context.Context, id string, port int32, str
 		errCh := make(chan error, 2)
 		// Copy from the namespace port connection to the client stream
 		go func() {
-			log.G(ctx).Debugf("PortForward copying data from namespace %q port %d to the client stream", id, port)
 			_, err := io.Copy(stream, conn)
+			log.G(ctx).Debugf("PortForward copying data from namespace %q port %d to the client stream: %v", id, port, err)
 			errCh <- err
 		}()
 
 		// Copy from the client stream to the namespace port connection
 		go func() {
-			log.G(ctx).Debugf("PortForward copying data from client stream to namespace %q port %d", id, port)
 			_, err := io.Copy(conn, stream)
+			log.G(ctx).Debugf("PortForward copying data from client stream to namespace %q port %d: %v", id, port, err)
 			errCh <- err
 		}()
 
