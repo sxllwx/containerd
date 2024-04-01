@@ -242,8 +242,8 @@ Loop:
 // function for the given stream pair.
 func (h *httpStreamHandler) portForward(p *httpStreamPair) {
 	ctx := context.Background()
-	defer p.dataStream.Close()
-	defer p.errorStream.Close()
+	defer p.dataStream.Reset()
+	defer p.errorStream.Reset()
 
 	portString := p.dataStream.Headers().Get(api.PortHeader)
 	port, _ := strconv.ParseInt(portString, 10, 32)
@@ -255,7 +255,7 @@ func (h *httpStreamHandler) portForward(p *httpStreamPair) {
 	if err != nil {
 		msg := fmt.Errorf("error forwarding port %d to pod %s, uid %v: %v", port, h.pod, h.uid, err)
 		utilruntime.HandleError(msg)
-		fmt.Fprint(p.errorStream, msg.Error())
+		//fmt.Fprint(p.errorStream, msg.Error())
 	}
 }
 
